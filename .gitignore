@@ -470,3 +470,5 @@ TSWLatexianTemp*
 # custom
 .DS_Store
 config.ini
+.vscode/
+*.pt
