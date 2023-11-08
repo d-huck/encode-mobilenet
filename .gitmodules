@@ -1,0 +1,6 @@
+[submodule "encodec"]
+	path = encodec
+	url = git@github.com:facebookresearch/encodec.git
+[submodule "mobilenetv3"]
+	path = mobilenetv3
+	url = git@github.com:xiaolai-sqlai/mobilenetv3.git
