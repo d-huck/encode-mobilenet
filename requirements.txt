@@ -1,0 +1,6 @@
+accelerate
+datasets
+torch
+torchaudio
+jupyter
+tqdm
