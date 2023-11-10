@@ -63,7 +63,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
     preds, targets = [], []
     t_loss, v_loss = 0, 0
     for x, y in tqdm(
-        train, leave=False, desc=f"Epoch: {epoch+1:03d} Training   | ", position=0
+        train, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
     ):
         optimizer.zero_grad()
         out = model(x)
@@ -88,7 +88,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
     model.eval()
     with torch.no_grad():
         for x, y in tqdm(
-            valid, leave=False, desc=f"Epoch: {epoch+1:03d} Validation | ", position=0
+            valid, leave=False, desc=f"Epoch: {epoch+1:03d} | Validation", position=0
         ):
             out = model(x)
             loss = criterion(out, y)
