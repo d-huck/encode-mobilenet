@@ -33,7 +33,11 @@ logger.setLevel(logging.INFO)
 def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, args):
     """Trains a single epoch of the model, Expects $n$ data items in the dataset,
     and performs it's own validation split on the data. A common strategy on AudioSet
-    is to consider an epoch to be 100,000 samples.
+    is to consider an epoch to be 100,000 samples. Here we will be doing a pseudo
+    cross validation since we are splitting _after_ the data has been shuffled one time.
+    Once we have gone through the entire dataset one time, we will past training examples
+    in the valid set. We are not currently using he validation map or loss as any kind
+    of signal as of yet.
 
     :param model: model to be trained
     :type model: nn.Module
@@ -107,8 +111,8 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
     )
 
-    del preds, targets
-    torch.cuda.empty_cache()
+    # del preds, targets
+    # torch.cuda.empty_cache()
 
 
 def main(args):
@@ -119,10 +123,10 @@ def main(args):
         model = MobileNetV3_Smol(num_classes=args.n_classes)
 
     train_iter_per_epoch = (
-        int(args.steps_per_epoch * (1 - args.valid_size) / args.batch_size) + 1
+        int(args.examples_per_epoch * (1 - args.valid_size) / args.batch_size) + 1
     )
     valid_iter_per_epoch = (
-        int(args.steps_per_epoch * args.valid_size / args.batch_size) + 1
+        int(args.examples_per_epoch * args.valid_size / args.batch_size) + 1
     )
 
     total_iter = args.epochs * (train_iter_per_epoch + valid_iter_per_epoch)
@@ -133,10 +137,13 @@ def main(args):
     model.to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
     criterion = nn.BCEWithLogitsLoss()
+
+    sched_pct = args.warmup / args.epochs
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         epochs=args.epochs,
         steps_per_epoch=train_iter_per_epoch,
+        pct_start=sched_pct,
         max_lr=1e-3,
     )
 
@@ -147,7 +154,7 @@ def main(args):
 
     dataset = AudioSetDataset(dataset, device=args.device)
     dataloader = DataLoader(
-        dataset, batch_size=args.steps_per_epoch, shuffle=True, drop_last=True
+        dataset, batch_size=args.examples_per_epoch, shuffle=True, drop_last=True
     )
 
     count = 0
@@ -170,25 +177,24 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset", type=str, default="audioset")
-    parser.add_argument("-f", "--data_path", type=str, default="data", required=True)
-    parser.add_argument("-o", "--checkpoint", type=str, default="output.ptw")
-    parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--steps_per_epoch", type=int, default=100_000),
-    parser.add_argument("--lr", type=float, default=1e-3),
-    parser.add_argument("--fp16", action="store_true"),
+    parser.add_argument("-f", "--data_path", type=str, default="data", required=True, help="Path to the data file")
+    parser.add_argument("-o", "--checkpoint", type=str, default="output.ptw", help="Path to save the model")
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
+    parser.add_argument("--epochs", type=int, default=100, help="Total number of epochs to train for")
+    parser.add_argument("--examples_per_epoch", type=int, default=100_000, help="Number of examples we will use in each epoch"),
+    parser.add_argument("--lr", type=float, default=1e-3, help="The max learning rate of the optimizer. This is used in the OneCycleLR scheduler."),
+    parser.add_argument("--fp16", action="store_true", default=False, help="Use mixed precision training"),
     parser.add_argument(
-        "--model_size", type=str, default="large", choices=["large", "small"]
+        "--model_size", type=str, default="large", choices=["large", "small"], help="Which model size to use"
     )
-    parser.add_argument("--n_classes", type=int, default=527)
+    parser.add_argument("--n_classes", type=int, default=527, help="Number of classes in the dataset")
     parser.add_argument(
-        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
+        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Which device to use"
     )
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--valid", type=bool, default=True)
-    parser.add_argument("--valid_size", type=float, default=0.1)
-    parser.add_argument("--checkpoint_interval", type=int, default=10)
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--valid_size", type=float, default=0.1, help="Validation set ratio for each epoch")
+    parser.add_argument("--warmup", type=int, default=10, help="Number of epochs to warmup the learning rate"")
+    parser.add_argument("--checkpoint_interval", type=int, default=10, "how_often to save the model. Unimplemented")
 
     args = parser.parse_args()
     main(args)
