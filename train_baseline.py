@@ -13,7 +13,6 @@ from torchmetrics.classification import MultilabelAveragePrecision
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-# FIXME: ugly name clash if you have the datasets package installed
 from data import AudioSetDataset, AudioSetEpoch, GTZANDataset, split_data
 from encodec import EncodecModel
 from encodec.quantization import ResidualVectorQuantizer
@@ -70,6 +69,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         train, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
     ):
         optimizer.zero_grad()
+        x, y = x.to(args.device), y.to(args.device)
         out = model(x)
         loss = criterion(out, y)
 
@@ -94,6 +94,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         for x, y in tqdm(
             valid, leave=False, desc=f"Epoch: {epoch+1:03d} | Validation", position=0
         ):
+            x, y = x.to(args.device), y.to(args.device)
             out = model(x)
             loss = criterion(out, y)
 
@@ -111,8 +112,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
     )
 
-    # del preds, targets
-    # torch.cuda.empty_cache()
+    del train, valid, preds, targets
 
 
 def main(args):
@@ -149,10 +149,11 @@ def main(args):
 
     # load data
     logger.info("Loading data")
-    dataset = torch.load("./audioset_encodings-12.0-unbalanced-330k.data")
-    n_examples = len(dataset["data"])
+    # dataset = torch.load("./audioset_encodings-12.0-unbalanced-330k.data")
+    # n_examples = len(dataset["data"])
 
-    dataset = AudioSetDataset(dataset, device=args.device)
+    dataset = AudioSetDataset(args.data_path, device=args.device)
+    n_examples = len(dataset)
     dataloader = DataLoader(
         dataset, batch_size=args.examples_per_epoch, shuffle=True, drop_last=True
     )
@@ -177,24 +178,82 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-f", "--data_path", type=str, default="data", required=True, help="Path to the data file")
-    parser.add_argument("-o", "--checkpoint", type=str, default="output.ptw", help="Path to save the model")
-    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
-    parser.add_argument("--epochs", type=int, default=100, help="Total number of epochs to train for")
-    parser.add_argument("--examples_per_epoch", type=int, default=100_000, help="Number of examples we will use in each epoch"),
-    parser.add_argument("--lr", type=float, default=1e-3, help="The max learning rate of the optimizer. This is used in the OneCycleLR scheduler."),
-    parser.add_argument("--fp16", action="store_true", default=False, help="Use mixed precision training"),
     parser.add_argument(
-        "--model_size", type=str, default="large", choices=["large", "small"], help="Which model size to use"
+        "-f",
+        "--data_path",
+        type=str,
+        default="data",
+        required=True,
+        help="Directory holding training examples",
     )
-    parser.add_argument("--n_classes", type=int, default=527, help="Number of classes in the dataset")
     parser.add_argument(
-        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Which device to use"
+        "-o",
+        "--checkpoint",
+        type=str,
+        default="output.ptw",
+        help="Path to save the model",
+    )
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size")
+    parser.add_argument(
+        "--epochs", type=int, default=100, help="Total number of epochs to train for"
+    )
+    parser.add_argument(
+        "--examples_per_epoch",
+        type=int,
+        default=100_000,
+        help="Number of examples we will use in each epoch",
+    ),
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-3,
+        help="The max learning rate of the optimizer. This is used in the OneCycleLR scheduler.",
+    ),
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        default=False,
+        help="Use mixed precision training",
+    ),
+    parser.add_argument(
+        "--model_size",
+        type=str,
+        default="large",
+        choices=["large", "small"],
+        help="Which model size to use",
+    )
+    parser.add_argument(
+        "--n_classes", type=int, default=527, help="Number of classes in the dataset"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Which device to use",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--valid_size", type=float, default=0.1, help="Validation set ratio for each epoch")
-    parser.add_argument("--warmup", type=int, default=10, help="Number of epochs to warmup the learning rate"")
-    parser.add_argument("--checkpoint_interval", type=int, default=10, "how_often to save the model. Unimplemented")
+    parser.add_argument(
+        "--valid_size",
+        type=float,
+        default=0.1,
+        help="Validation set ratio for each epoch",
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=10,
+        help="Number of epochs to warmup the learning rate",
+    )
+    parser.add_argument(
+        "--checkpoint_interval",
+        type=int,
+        default=10,
+        help="how_often to save the model. Unimplemented",
+    )
+    parser.add_argument(
+        "--num_workers", type=int, default=8, help="Number of torch load workers"
+    )
 
     args = parser.parse_args()
+    torch.multiprocessing.set_start_method("spawn")
     main(args)
