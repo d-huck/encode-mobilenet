@@ -17,10 +17,10 @@ from encodec import EncodecModel
 from encodec.utils import convert_audio
 
 
-def get_files(fp: str) -> list:
+def get_files(fp: str, ext=".flac") -> list:
     for root, dirr, files in os.walk(fp):
         for f in files:
-            if f.endswith(".flac"):
+            if f.endswith(ext):
                 yield os.path.join(root, f)
 
 
@@ -149,7 +149,7 @@ def load_worker(file_q, meta, label_dict, encode_q, write_q, target_sr, channels
     done.wait()
 
 
-def encode_worker(encode_q, write_q, done, args, batch_size=128):
+def encode_worker(encode_q, write_q, done, args, batch_size=512):
     batch = []
     none_counter = 0
     encoder = EncodecModel.encodec_model_24khz()
@@ -219,7 +219,9 @@ def main(args):
     label_dict = load_labels(args.labels)
 
     workers = []
-    encoded = [os.path.basename(x).split(".")[0] for x in get_files(args.output_dir)]
+    encoded = {
+        os.path.basename(x).split(".")[0] for x in get_files(args.output_dir, ext=".pt")
+    }
 
     for i, file in enumerate(get_files(args.input_dir)):
         ytid = os.path.basename(file).split(".")[0]
