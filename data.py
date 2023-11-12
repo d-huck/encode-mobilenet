@@ -36,20 +36,6 @@ class AudioSetEpoch(Dataset):
         super().__init__()
         self.files = fp
 
-        # self.data, self.labels = [], []
-        # for file in fp:
-        #     data = torch.load(file)
-        #     self.data.append(data["audio"])
-        #     label = torch.tensor(data["labels"])
-        #     self.labels = torch.sum(
-        #         F.one_hot(label, num_classes=527), dim=0, dtype=torch.float32
-        #     )
-
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
-
     def __len__(self):
         return len(self.files)
 
@@ -103,6 +89,6 @@ def split_data(
         train, batch_size=batch_size, num_workers=num_workers, shuffle=True
     )
     test_loader = DataLoader(
-        valid, batch_size=batch_size, num_workers=num_workers, shuffle=True
+        valid, batch_size=batch_size, num_workers=num_workers, shuffle=False
     )
     return train_loader, test_loader

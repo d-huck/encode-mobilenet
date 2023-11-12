@@ -1,7 +1,6 @@
 import argparse
 import logging
 from ast import parse
-from regex import D
 
 import torch
 import torch.nn as nn
@@ -112,8 +111,6 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
     )
 
-    del train, valid, preds, targets
-
 
 def main(args):
     logger.info("Loading model")
@@ -155,7 +152,11 @@ def main(args):
     dataset = AudioSetDataset(args.data_path, device=args.device)
     n_examples = len(dataset)
     dataloader = DataLoader(
-        dataset, batch_size=args.examples_per_epoch, shuffle=True, drop_last=True
+        dataset,
+        batch_size=args.examples_per_epoch,
+        shuffle=False,
+        drop_last=True,
+        # num_workers=4,
     )
 
     count = 0
@@ -171,6 +172,13 @@ def main(args):
                 count += 1
                 if count >= args.epochs:
                     break
+                if count % args.checkpoint_interval == 0:
+                    checkpoint, ext = (
+                        ".".join(args.checkpoint.split(".")[:-1]),
+                        args.checkpoint.split(".")[-1],
+                    )
+                    checkpoint = f"{checkpoint}-e{count:03d}.{ext}"
+                    torch.save(model.state_dict(), checkpoint)
 
         torch.save(model.state_dict(), args.checkpoint)
 
@@ -255,5 +263,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    torch.multiprocessing.set_start_method("spawn")
+    # if args.num_workers > 0:
+    #     torch.multiprocessing.set_start_method("spawn")
     main(args)
