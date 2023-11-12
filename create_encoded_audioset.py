@@ -313,8 +313,17 @@ if __name__ == "__main__":
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="torch device to use",
     )
-
+    parser.add_argument(
+        "--target_device",
+        type=int,
+        default=0,
+        help="Target GPU device to use. Only valid if device is cuda",
+    )
     args = parser.parse_args()
+    
+    if args.device == 'cuda':
+        torch.cuda.set_device(args.target_device)
+    
     torch.multiprocessing.set_start_method("spawn")
     torch.multiprocessing.set_sharing_strategy("file_system")
 

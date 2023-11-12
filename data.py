@@ -2,10 +2,13 @@ import torch
 import os
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-from sklearn.model_selection import train_test_split
 
 
 class AudioSetDataset(Dataset):
+    """Entire Audioset Dataset. Expects a directory of saved torch tensors that can be
+    loaded at will and served to mobilenet.
+    """
+
     def __init__(self, fp: str, ext=".pt", device=None):
         super().__init__()
         self.files = []
@@ -89,17 +92,12 @@ def split_data(
     dataset_t: Dataset = GTZANDataset,
     shuffle=True,
 ):
+    # since the entire file list is shuffled before it goes through, this method
+    # of splitting is still somewhat random.
     valid_size = int(valid_size * len(data))
     train, valid = data[valid_size:], data[:valid_size]
     train = dataset_t(train, device=device)
     valid = dataset_t(valid, device=device)
-
-    # x, y = data
-    # x_train, x_test, y_train, y_test = train_test_split(
-    #     x, y, test_size=test_size, random_state=random_seed
-    # )
-    # train = dataset_t(x_train, y_train, device=device)
-    # test = dataset_t(x_test, y_test, device=device)
 
     train_loader = DataLoader(
         train, batch_size=batch_size, num_workers=num_workers, shuffle=True
