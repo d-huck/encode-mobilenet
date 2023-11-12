@@ -59,6 +59,7 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         random_seed=args.seed,
         device=args.device,
         test_size=args.valid_size,
+        num_workers=args.num_workers,
         dataset_t=AudioSetEpoch,
     )
 
@@ -75,8 +76,8 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
 
         # collect some metrics
         t_loss += loss.item()
-        preds.append(out)
-        targets.append(y)
+        preds.append(out.detach().to("cpu"))
+        targets.append(y.detach().to("cpu"))
 
         # do the thing
         loss.backward()
@@ -84,11 +85,12 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
         scheduler.step()
         pbar.update(1)
 
-    preds = torch.cat(preds)
-    targets = torch.cat(targets).type(torch.int32)
-    train_map = metric(preds, targets).to("cpu").item()
-    preds, targets = [], []
+    preds = torch.cat(preds).to(args.device)
+    targets = torch.cat(targets).type(torch.int32).to(args.device)
+    train_map = metric(preds, targets).item()
+    del preds, targets
 
+    preds, targets = [], []
     model.eval()
     with torch.no_grad():
         for x, y in tqdm(
@@ -100,13 +102,14 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
 
             # collect some metrics
             v_loss += loss.item()
-            preds.append(out)
-            targets.append(y)
+            preds.append(out.to("cpu"))
+            targets.append(y.to("cpu"))
             pbar.update(1)
 
-    preds = torch.cat(preds)
-    targets = torch.cat(targets).type(torch.int32)
-    valid_map = metric(preds, targets).to("cpu").item()
+    preds = torch.cat(preds).to(args.device)
+    targets = torch.cat(targets).type(torch.int32).to(args.device)
+    valid_map = metric(preds, targets).item()
+    del preds, targets
 
     tqdm.write(
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
