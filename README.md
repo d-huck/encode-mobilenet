@@ -3,9 +3,9 @@
 3. Run the following:
 
 ```
-git submodule init --recursive
+git submodule update --init
 pip install -r requirements.txt
 cd encodec && pip install -e .
 ```
 
-Alternatively, you can install from the requirements.txt 
+Alternatively, you can install from the requirements.txt
