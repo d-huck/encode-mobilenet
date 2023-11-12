@@ -1,5 +1,6 @@
 import argparse
 import logging
+import wandb
 from ast import parse
 
 import torch
@@ -109,6 +110,15 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
 
     tqdm.write(
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
+    )
+    wandb.log(
+        {
+            "train_loss": t_loss,
+            "valid_loss": v_loss,
+            "train_map": train_map,
+            "valid_map": valid_map,
+            "lr": scheduler.get_last_lr()[0],
+        }
     )
 
 
@@ -261,8 +271,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_workers", type=int, default=8, help="Number of torch load workers"
     )
+    parser.add_argument(
+        "--wandb", action="store_true", default=True, help="Use wandb for logging"
+    )
 
     args = parser.parse_args()
+
+    if args.wandb:
+        wandb.init(project="encodec-mobilenet-as")
+        wandb.config.update(args)
     # if args.num_workers > 0:
     #     torch.multiprocessing.set_start_method("spawn")
     main(args)
