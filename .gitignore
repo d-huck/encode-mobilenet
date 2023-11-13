@@ -472,3 +472,6 @@ TSWLatexianTemp*
 config.ini
 .vscode/
 *.pt
+
+wandb/
+*.data
