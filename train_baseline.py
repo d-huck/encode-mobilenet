@@ -18,7 +18,7 @@ from data import AudioSetDataset, AudioSetEpoch, GTZANDataset, get_files
 from encodec import EncodecModel
 from encodec.quantization import ResidualVectorQuantizer
 from encodec.utils import convert_audio
-from mobilenet import MobileNetV3_LARGE, MobileNetV3_Smol
+from mobilenet import MobileNet, MobileNetV3_Smol
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -58,15 +58,6 @@ def train_one_epoch(
 
     train_set = AudioSetEpoch(train_data, device=args.device)
     train_loader = DataLoader(train_set, batch_size=args.batch_size)
-    # train, valid = split_data(
-    #     data,
-    #     batch_size=args.batch_size,
-    #     random_seed=args.seed,
-    #     device=args.device,
-    #     test_size=args.valid_size,
-    #     num_workers=args.num_workers,
-    #     dataset_t=AudioSetEpoch,
-    # )
 
     model.train()
     preds, targets = [], []
@@ -136,9 +127,11 @@ def train_one_epoch(
 def main(args):
     logger.info("Loading model")
     if args.model_size == "large":
-        model = MobileNetV3_LARGE(num_classes=args.n_classes)
+        model = MobileNet(
+            num_classes=args.n_classes, encodec_bw=args.encodec_bw, a=args.alpha
+        )
     else:
-        model = MobileNetV3_Smol(num_classes=args.n_classes)
+        model = MobileNetV3_Smol(num_classes=args.n_classes, encodec_bw=args.encodec_bw)
 
     train_iter_per_epoch = int(np.ceil(args.examples_per_epoch / args.batch_size))
 
@@ -157,8 +150,6 @@ def main(args):
 
     # load data
     logger.info("Loading data")
-    # dataset = torch.load("./audioset_encodings-12.0-unbalanced-330k.data")
-    # n_examples = len(dataset["data"])
 
     dataset = AudioSetDataset(args.data_path, device=args.device)
     n_examples = len(dataset)
@@ -182,12 +173,12 @@ def main(args):
     valid_iter_per_epoch = len(valid_loader)
 
     total_iter = args.epochs * (train_iter_per_epoch + valid_iter_per_epoch)
+    logger.info("Starting training...")
     logger.info(
         f"Training for {total_iter} iterations with {train_iter_per_epoch} train and {valid_iter_per_epoch} validation iterations per epoch"
     )
 
     count = 0
-    logger.info("Starting training...")
     with tqdm(
         total=total_iter, desc="Total Training", position=1, smoothing=0.01
     ) as pbar:
@@ -249,7 +240,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lr",
         type=float,
-        default=1e-3,
+        default=8e-4,
         help="The max learning rate of the optimizer. This is used in the OneCycleLR scheduler.",
     ),
     parser.add_argument(
@@ -284,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--warmup",
         type=int,
-        default=10,
+        default=8,
         help="Number of epochs to warmup the learning rate",
     )
     parser.add_argument(
@@ -297,11 +288,20 @@ if __name__ == "__main__":
         "--num_workers", type=int, default=8, help="Number of torch load workers"
     )
     parser.add_argument(
-        "--wandb", action="store_true", default=True, help="Use wandb for logging"
+        "--wandb", action="store_true", default=False, help="Use wandb for logging"
+    )
+    parser.add_argument(
+        "--encodec_bw", type=float, default=12.0, help="Target bandwidth for encodec"
     )
 
     parser.add_argument(
         "--valid_path", type=str, default="data/valid", help="Path to validation data"
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=1.0,
+        help="Sets the width of the model. alpha == 1 produces MobileNetV3-Large, while any other value scales the width of the model.",
     )
 
     args = parser.parse_args()
