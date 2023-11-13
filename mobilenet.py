@@ -87,9 +87,9 @@ class MobileNetV3_Smol(nn.Module):
 
 
 # first layer of mobilenet
-class MobileNetV3_LARGE(nn.Module):
-    def __init__(self, encodec_bw=1.5, num_classes=10, act=nn.Hardswish):
-        super(MobileNetV3_LARGE, self).__init__()
+class MobileNet(nn.Module):
+    def __init__(self, encodec_bw=1.5, num_classes=10, a=1.0, act=nn.Hardswish):
+        super(MobileNet, self).__init__()
         encoder = EncodecModel.encodec_model_24khz()
         encoder.set_target_bandwidth(encodec_bw)
         self.quantizer = encoder.quantizer
@@ -97,51 +97,65 @@ class MobileNetV3_LARGE(nn.Module):
 
         self.projection = nn.Sequential(
             nn.Conv2d(
-                1, 16, kernel_size=(1, 3), stride=(1, 2), padding=(0, 0), bias=False
+                1,
+                int(16 * a),
+                kernel_size=(1, 3),
+                stride=(1, 2),
+                padding=(0, 0),
+                bias=False,
             ),
-            nn.BatchNorm2d(16),
+            nn.BatchNorm2d(int(16 * a)),
             nn.ReLU(),
             nn.Conv2d(
-                16, 16, kernel_size=(1, 5), stride=(1, 3), padding=(0, 6), bias=False
+                int(16 * a),
+                int(16 * a),
+                kernel_size=(1, 5),
+                stride=(1, 3),
+                padding=(0, 6),
+                bias=False,
             ),
-            nn.BatchNorm2d(16),
+            nn.BatchNorm2d(int(16 * a)),
             nn.ReLU(),
         )
 
-        self.conv1 = nn.Conv2d(16, 16, kernel_size=21, stride=1, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(
+            int(16 * a), int(16 * a), kernel_size=21, stride=1, padding=2, bias=False
+        )
 
-        self.bn1 = nn.BatchNorm2d(16)
+        self.bn1 = nn.BatchNorm2d(int(16 * a))
         self.hs1 = act(inplace=True)
 
         self.bneck = nn.Sequential(
-            Block(3, 16, 16, 16, nn.ReLU, False, 1),
-            Block(3, 16, 64, 24, nn.ReLU, False, 2),
-            Block(3, 24, 72, 24, nn.ReLU, False, 1),
-            Block(5, 24, 72, 40, nn.ReLU, True, 2),
-            Block(5, 40, 120, 40, nn.ReLU, True, 1),
-            Block(5, 40, 120, 40, nn.ReLU, True, 1),
-            Block(3, 40, 240, 80, act, False, 2),
-            Block(3, 80, 200, 80, act, False, 1),
-            Block(3, 80, 184, 80, act, False, 1),
-            Block(3, 80, 184, 80, act, False, 1),
-            Block(3, 80, 480, 112, act, True, 1),
-            Block(3, 112, 672, 112, act, True, 1),
-            Block(5, 112, 672, 160, act, True, 2),
-            Block(5, 160, 672, 160, act, True, 1),
-            Block(5, 160, 960, 160, act, True, 1),
+            Block(3, int(16 * a), int(16 * a), int(16 * a), nn.ReLU, False, 1),
+            Block(3, int(16 * a), int(64 * a), int(24 * a), nn.ReLU, False, 2),
+            Block(3, int(24 * a), int(72 * a), int(24 * a), nn.ReLU, False, 1),
+            Block(5, int(24 * a), int(72 * a), int(40 * a), nn.ReLU, True, 2),
+            Block(5, int(40 * a), int(120 * a), int(40 * a), nn.ReLU, True, 1),
+            Block(5, int(40 * a), int(120 * a), int(40 * a), nn.ReLU, True, 1),
+            Block(3, int(40 * a), int(240 * a), int(80 * a), act, False, 2),
+            Block(3, int(80 * a), int(200 * a), int(80 * a), act, False, 1),
+            Block(3, int(80 * a), int(184 * a), int(80 * a), act, False, 1),
+            Block(3, int(80 * a), int(184 * a), int(80 * a), act, False, 1),
+            Block(3, int(80 * a), int(480 * a), int(112 * a), act, True, 1),
+            Block(3, int(112 * a), int(672 * a), int(112 * a), act, True, 1),
+            Block(5, int(112 * a), int(672 * a), int(160 * a), act, True, 2),
+            Block(5, int(160 * a), int(672 * a), int(160 * a), act, True, 1),
+            Block(5, int(160 * a), int(960 * a), int(160 * a), act, True, 1),
         )
 
-        self.conv2 = nn.Conv2d(160, 960, kernel_size=1, stride=1, padding=0, bias=False)
-        self.bn2 = nn.BatchNorm2d(960)
+        self.conv2 = nn.Conv2d(
+            int(160 * a), int(960 * a), kernel_size=1, stride=1, padding=0, bias=False
+        )
+        self.bn2 = nn.BatchNorm2d(int(960 * a))
         self.hs2 = act(inplace=True)
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.linear3 = nn.Linear(960, 1280, bias=False)
-        self.bn3 = nn.BatchNorm1d(1280)
+        self.linear3 = nn.Linear(int(960 * a), int(1280 * a), bias=False)
+        self.bn3 = nn.BatchNorm1d(int(1280 * a))
         self.hs3 = act(inplace=True)
         self.drop = nn.Dropout(0.2)
 
-        self.linear4 = nn.Linear(1280, num_classes)
+        self.linear4 = nn.Linear(int(1280 * a), num_classes)
         self.init_params()
 
     def init_params(self):
