@@ -4,6 +4,13 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 
+def get_files(fp: str, ext=".flac") -> list:
+    for root, dirr, files in os.walk(fp):
+        for f in files:
+            if f.endswith(ext):
+                yield os.path.join(root, f)
+
+
 class AudioSetDataset(Dataset):
     """Entire Audioset Dataset. Expects a directory of saved torch tensors that can be
     loaded at will and served to mobilenet.
@@ -11,11 +18,7 @@ class AudioSetDataset(Dataset):
 
     def __init__(self, fp: str, ext=".pt", device=None):
         super().__init__()
-        self.files = []
-        for root, dirs, files in os.walk(fp):
-            for file in files:
-                if file.endswith(ext):
-                    self.files.append(os.path.join(root, file))
+        self.files = [file for file in get_files(fp, ext=ext)]
 
     def __len__(self):
         return len(self.files)

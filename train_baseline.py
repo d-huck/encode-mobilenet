@@ -1,8 +1,8 @@
 import argparse
 import logging
-import wandb
-from ast import parse
+import random
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torchaudio
@@ -13,7 +13,8 @@ from torchmetrics.classification import MultilabelAveragePrecision
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from data import AudioSetDataset, AudioSetEpoch, GTZANDataset, split_data
+import wandb
+from data import AudioSetDataset, AudioSetEpoch, GTZANDataset, get_files
 from encodec import EncodecModel
 from encodec.quantization import ResidualVectorQuantizer
 from encodec.utils import convert_audio
@@ -29,7 +30,9 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, args):
+def train_one_epoch(
+    model, optimizer, criterion, scheduler, train_data, valid_loader, epoch, pbar, args
+):
     """Trains a single epoch of the model, Expects $n$ data items in the dataset,
     and performs it's own validation split on the data. A common strategy on AudioSet
     is to consider an epoch to be 100,000 samples. Here we will be doing a pseudo
@@ -53,21 +56,23 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
 
     metric = MultilabelAveragePrecision(num_labels=args.n_classes)
 
-    train, valid = split_data(
-        data,
-        batch_size=args.batch_size,
-        random_seed=args.seed,
-        device=args.device,
-        test_size=args.valid_size,
-        num_workers=args.num_workers,
-        dataset_t=AudioSetEpoch,
-    )
+    train_set = AudioSetEpoch(train_data, device=args.device)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size)
+    # train, valid = split_data(
+    #     data,
+    #     batch_size=args.batch_size,
+    #     random_seed=args.seed,
+    #     device=args.device,
+    #     test_size=args.valid_size,
+    #     num_workers=args.num_workers,
+    #     dataset_t=AudioSetEpoch,
+    # )
 
     model.train()
     preds, targets = [], []
     t_loss, v_loss = 0, 0
     for x, y in tqdm(
-        train, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
+        train_loader, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
     ):
         optimizer.zero_grad()
         x, y = x.to(args.device), y.to(args.device)
@@ -94,7 +99,10 @@ def train_one_epoch(model, optimizer, criterion, scheduler, data, epoch, pbar, a
     model.eval()
     with torch.no_grad():
         for x, y in tqdm(
-            valid, leave=False, desc=f"Epoch: {epoch+1:03d} | Validation", position=0
+            valid_loader,
+            leave=False,
+            desc=f"Epoch: {epoch+1:03d} | Validation",
+            position=0,
         ):
             x, y = x.to(args.device), y.to(args.device)
             out = model(x)
@@ -132,20 +140,10 @@ def main(args):
     else:
         model = MobileNetV3_Smol(num_classes=args.n_classes)
 
-    train_iter_per_epoch = (
-        int(args.examples_per_epoch * (1 - args.valid_size) / args.batch_size) + 1
-    )
-    valid_iter_per_epoch = (
-        int(args.examples_per_epoch * args.valid_size / args.batch_size) + 1
-    )
-
-    total_iter = args.epochs * (train_iter_per_epoch + valid_iter_per_epoch)
-    logger.info(
-        f"Training for {total_iter} iterations with {train_iter_per_epoch} train and {valid_iter_per_epoch} validation iterations per epoch"
-    )
+    train_iter_per_epoch = int(np.ceil(args.examples_per_epoch / args.batch_size))
 
     model.to(args.device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.BCEWithLogitsLoss()
 
     sched_pct = args.warmup / args.epochs
@@ -154,7 +152,7 @@ def main(args):
         epochs=args.epochs,
         steps_per_epoch=train_iter_per_epoch,
         pct_start=sched_pct,
-        max_lr=1e-3,
+        max_lr=args.lr,
     )
 
     # load data
@@ -164,12 +162,28 @@ def main(args):
 
     dataset = AudioSetDataset(args.data_path, device=args.device)
     n_examples = len(dataset)
-    dataloader = DataLoader(
+    epoch_loader = DataLoader(
         dataset,
         batch_size=args.examples_per_epoch,
-        shuffle=False,
+        shuffle=True,
         drop_last=True,
-        # num_workers=4,
+    )
+
+    valid_files = [file for file in get_files(args.valid_path, ext=".pt")]
+    print(len(valid_files))
+    valid_set = AudioSetEpoch(valid_files, device=args.device)
+    valid_loader = DataLoader(
+        valid_set,
+        shuffle=True,
+        batch_size=args.batch_size,
+        pin_memory=True,
+    )
+
+    valid_iter_per_epoch = len(valid_loader)
+
+    total_iter = args.epochs * (train_iter_per_epoch + valid_iter_per_epoch)
+    logger.info(
+        f"Training for {total_iter} iterations with {train_iter_per_epoch} train and {valid_iter_per_epoch} validation iterations per epoch"
     )
 
     count = 0
@@ -178,9 +192,17 @@ def main(args):
         total=total_iter, desc="Total Training", position=1, smoothing=0.01
     ) as pbar:
         while count < args.epochs:
-            for data in dataloader:
+            for data in epoch_loader:
                 train_one_epoch(
-                    model, optimizer, criterion, scheduler, data, count, pbar, args
+                    model,
+                    optimizer,
+                    criterion,
+                    scheduler,
+                    data,
+                    valid_loader,
+                    count,
+                    pbar,
+                    args,
                 )
                 count += 1
                 if count >= args.epochs:
@@ -278,11 +300,18 @@ if __name__ == "__main__":
         "--wandb", action="store_true", default=True, help="Use wandb for logging"
     )
 
+    parser.add_argument(
+        "--valid_path", type=str, default="data/valid", help="Path to validation data"
+    )
+
     args = parser.parse_args()
 
     if args.wandb:
         wandb.init(project="encodec-mobilenet-as")
         wandb.config.update(args)
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     # if args.num_workers > 0:
     #     torch.multiprocessing.set_start_method("spawn")
     main(args)

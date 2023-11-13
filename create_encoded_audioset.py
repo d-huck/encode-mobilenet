@@ -175,11 +175,12 @@ def encode_worker(encode_q, write_q, done, args, batch_size=512):
 
     # take care of the stragglers
     if len(batch) > 0:
-        audios = torch.cat([x["audio"] for x in batch], dim=0)
-        encoded = encode_data(audios, encoder, batch_size=128).cpu()
+        audios = [x["audio"] for x in batch]
+        out = encode_data(audios, encoder, batch_size=128, device=args.device)
         for i, d in enumerate(batch):
-            d["audio"] = encoded[i].clone().detach()
+            d["audio"] = out[i].clone().detach()
             write_q.put(d)
+
     write_q.put(None)
     done.wait()
 
@@ -320,10 +321,10 @@ if __name__ == "__main__":
         help="Target GPU device to use. Only valid if device is cuda",
     )
     args = parser.parse_args()
-    
-    if args.device == 'cuda':
+
+    if args.device == "cuda":
         torch.cuda.set_device(args.target_device)
-    
+
     torch.multiprocessing.set_start_method("spawn")
     torch.multiprocessing.set_sharing_strategy("file_system")
 
