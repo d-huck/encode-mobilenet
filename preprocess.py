@@ -78,7 +78,7 @@ def encode_data(batch, encoder, args):
         codes = torch.cat([e[0] for e in encoded_frames], dim=-1)
         codes = codes.to("cpu").detach()
 
-    encodings = [code for code in torch.split(codes, 1, dim=0)]
+    encodings = [code.clone() for code in torch.split(codes, 1, dim=0)]
     return encodings
 
 
@@ -108,7 +108,7 @@ def get_ast_logits(batch, model, args):
     with torch.no_grad():
         logits = model(**inputs).logits
     logits = logits.to("cpu").detach()
-    return [l.squeeze() for l in torch.split(logits, 1, dim=0)]
+    return [l.clone().squeeze() for l in torch.split(logits, 1, dim=0)]
 
 
 def load_worker(file_q, meta, labels_dict, encode_q, args, done):
@@ -181,7 +181,7 @@ def encode_worker(encode_q, ast_q, done, args):
             continue
         data = deepcopy(data)
         out = encode_data(data["encodec_audio"], encoder, args)
-        data["audio_tokens"] = out.squeeze()
+        data["audio_tokens"] = out
         del data["encodec_audio"]
         ast_q.put(data)
 
@@ -189,7 +189,6 @@ def encode_worker(encode_q, ast_q, done, args):
 
 
 def ast_worker(ast_q, write_q, done, args):
-    batch = []
     ast = ASTForAudioClassification.from_pretrained(
         "MIT/ast-finetuned-audioset-10-10-0.4593"
     )
@@ -201,7 +200,6 @@ def ast_worker(ast_q, write_q, done, args):
             write_q.put(None)
             break
         data = deepcopy(data)
-        batch.append(data)
         out = get_ast_logits(data["ast_audio"], ast, args)
         data["ast_logits"] = out
         del data["ast_audio"]
@@ -210,12 +208,12 @@ def ast_worker(ast_q, write_q, done, args):
     done.wait()
 
 
-def q_monitor(file_q, encode_q, ast_q, write_q, done):
+def q_monitor(file_q, encode_q, ast_q, write_q, args, done):
     while True:
         if file_q.qsize() == 0 and encode_q.qsize() == 0 and write_q.qsize() == 0:
             break
         print(
-            f"File Queue: {file_q.qsize()} | Encode Queue: {encode_q.qsize()} | AST Queue: {ast_q.qsize()} | Write Queue: {write_q.qsize()}"
+            f"File Queue: {file_q.qsize()} | Encode Queue: {encode_q.qsize():02d}/{args.batch_size} | AST Queue: {ast_q.qsize():02d}/{args.batch_size} | Write Queue: {write_q.qsize()}"
         )
         time.sleep(5)
 
@@ -234,8 +232,8 @@ def write_worker(write_q, fp, done):
         ):
             out = {
                 "ytid": y,
-                "ast_logits": a,
-                "audio_tokens": e,
+                "ast_logits": a.clone(),
+                "audio_tokens": e.squeeze().clone(),
                 "labels": l,
             }
             torch.save(out, os.path.join(fp, f"{y}.pt"))
@@ -245,7 +243,7 @@ def write_worker(write_q, fp, done):
 
 def main(args):
     file_q = mp.Queue()
-    encoder_q = mp.Queue(maxsize=4 * args.batch_size)
+    encoder_q = mp.Queue(maxsize=args.batch_size)
     ast_q = mp.Queue(maxsize=args.batch_size)
     write_q = mp.Queue()
     done = mp.Event()
@@ -267,7 +265,7 @@ def main(args):
     workers.append(
         mp.Process(
             target=q_monitor,
-            args=(file_q, encoder_q, ast_q, write_q, done),
+            args=(file_q, encoder_q, ast_q, write_q, args, done),
         )
     )
     for i in range(args.num_workers):
