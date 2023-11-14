@@ -163,7 +163,12 @@ def load_worker(file_q, meta, labels_dict, encode_q, args, done):
                 "ytid": [],
             }
 
-    encode_q.put(batch)
+    if len(batch['encodec_audio']) > 0:
+        batch['encodec_audio'] = torch.cat(batch['encodec_audio'], dim=0)
+        batch['ast_audio'] = feature_extractor(
+            np.stack(batch['ast_audio']), sampling_rate=AST_SR, return_tensors='pt'
+        )
+        encode_q.put(batch)
     done.wait()
 
 
