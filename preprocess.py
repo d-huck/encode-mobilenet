@@ -58,7 +58,7 @@ def load_labels(fp: str) -> dict:
     return json.load(open(fp, "r"))["mid2int"]
 
 
-def encode_data(batch, encoder, device=None):
+def encode_data(batch, encoder, args):
     """Encodes data to the target bandwidth using Encodec
 
     :param data: list of audio items
@@ -72,6 +72,7 @@ def encode_data(batch, encoder, device=None):
     :return: encoded data
     :rtype: _type_
     """
+    batch = batch.to(args.device)
     with torch.no_grad():
         encoded_frames = encoder.encode(batch)
         codes = torch.cat([e[0] for e in encoded_frames], dim=-1)
@@ -81,7 +82,7 @@ def encode_data(batch, encoder, device=None):
     return encodings
 
 
-def prepare_audio(fp, resampler):
+def prepare_audio(fp, resampler, feature_extractor):
     audio, sr = torchaudio.load(fp)
     encodec_audio = convert_audio(audio, sr, ENCODEC_SR, N_CHANNELS).unsqueeze(0)
 
@@ -102,11 +103,10 @@ def prepare_audio(fp, resampler):
     return encodec_audio, ast_audio.squeeze()
 
 
-def get_ast_logits(batch, model, feature_extractor, args):
-    inputs = feature_extractor(batch, sampling_rate=AST_SR, return_tensors="pt")
-    inputs = inputs.to(args.device)
+def get_ast_logits(batch, model, args):
+    inputs = batch.to(args.device)
     with torch.no_grad():
-        logits = model(inputs.input_values.to(args.device)).logits
+        logits = model(**inputs).logits
     logits = logits.to("cpu").detach()
     return [l.squeeze() for l in torch.split(logits, 1, dim=0)]
 
@@ -121,6 +121,16 @@ def load_worker(file_q, meta, labels_dict, encode_q, args, done):
         beta=14.769656459379492,
     )
 
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        "MIT/ast-finetuned-audioset-10-10-0.4593"
+    )
+    batch = {
+        "encodec_audio": [],
+        "ast_audio": [],
+        "labels": [],
+        "ytid": [],
+    }
+
     while True:
         fp = file_q.get()
         if fp is None:
@@ -131,18 +141,32 @@ def load_worker(file_q, meta, labels_dict, encode_q, args, done):
         if ytid not in meta:
             continue
 
-        e, p = prepare_audio(fp, resampler)
+        e, a = prepare_audio(fp, resampler, feature_extractor)
         labels = meta[ytid].replace('"', "").split(",")
         labels = [labels_dict[x] for x in labels]
+        batch["encodec_audio"].append(e)
+        batch["ast_audio"].append(a)
+        batch["labels"].append(labels)
+        batch["ytid"].append(ytid)
 
-        encode_q.put(
-            {"ytid": ytid, "encodec_audio": e, "ast_audio": p, "labels": labels}
-        )
+        if len(batch["encodec_audio"]) == args.batch_size:
+            batch["encodec_audio"] = torch.cat(batch["encodec_audio"], dim=0)
+            batch["ast_audio"] = feature_extractor(
+                np.stack(batch["ast_audio"]), sampling_rate=AST_SR, return_tensors="pt"
+            )
+            encode_q.put(batch)
+            batch = {
+                "encodec_audio": [],
+                "ast_audio": [],
+                "labels": [],
+                "ytid": [],
+            }
+
+    encode_q.put(batch)
     done.wait()
 
 
 def encode_worker(encode_q, ast_q, done, args):
-    batch = []
     none_ctr = 0
     encoder = EncodecModel.encodec_model_24khz()
     encoder.set_target_bandwidth(args.target_br)
@@ -156,32 +180,16 @@ def encode_worker(encode_q, ast_q, done, args):
                 break
             continue
         data = deepcopy(data)
-        batch.append(data)
-        if len(batch) == args.batch_size:
-            audio = torch.cat([b["encodec_audio"] for b in batch]).to(args.device)
-            out = encode_data(audio, encoder, args.device)
-            for i, d in enumerate(batch):
-                d["audio_tokens"] = out[i]
-                del d["encodec_audio"]
-                ast_q.put(d)
-
-            batch = []
-    if len(batch) > 0:
-        audio = torch.cat([b["encodec_audio"] for b in batch]).to(args.device)
-        out = encode_data(audio, encoder, args.device)
-        for i, d in enumerate(batch):
-            d["audio_tokens"] = out[i]
-            del d["encodec_audio"]
-            ast_q.put(d)
+        out = encode_data(data["encodec_audio"], encoder, args)
+        data["audio_tokens"] = out.squeeze()
+        del data["encodec_audio"]
+        ast_q.put(data)
 
     done.wait()
 
 
 def ast_worker(ast_q, write_q, done, args):
     batch = []
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        "MIT/ast-finetuned-audioset-10-10-0.4593"
-    )
     ast = ASTForAudioClassification.from_pretrained(
         "MIT/ast-finetuned-audioset-10-10-0.4593"
     )
@@ -194,21 +202,10 @@ def ast_worker(ast_q, write_q, done, args):
             break
         data = deepcopy(data)
         batch.append(data)
-        if len(batch) == args.batch_size:
-            audio = np.stack([b["ast_audio"] for b in batch])
-            out = get_ast_logits(audio, ast, feature_extractor, args)
-            for i, d in enumerate(batch):
-                d["ast_logits"] = out[i]
-                del d["ast_audio"]
-                write_q.put(d)
-            batch = []
-    if len(batch) > 0:
-        audio = np.stack([b["ast_audio"] for b in batch])
-        out = get_ast_logits(audio, ast, feature_extractor, args)
-        for i, d in enumerate(batch):
-            d["ast_logits"] = out[i]
-            del d["ast_audio"]
-            write_q.put(d)
+        out = get_ast_logits(data["ast_audio"], ast, args)
+        data["ast_logits"] = out
+        del data["ast_audio"]
+        write_q.put(data)
 
     done.wait()
 
@@ -232,7 +229,16 @@ def write_worker(write_q, fp, done):
             break
         data = deepcopy(data)
         # write to disk
-        torch.save(data, os.path.join(fp, f"{data['ytid']}.pt"))
+        for y, a, e, l in zip(
+            data["ytid"], data["ast_logits"], data["audio_tokens"], data["labels"]
+        ):
+            out = {
+                "ytid": y,
+                "ast_logits": a,
+                "audio_tokens": e,
+                "labels": l,
+            }
+            torch.save(out, os.path.join(fp, f"{y}.pt"))
 
     done.set()
 
@@ -240,7 +246,7 @@ def write_worker(write_q, fp, done):
 def main(args):
     file_q = mp.Queue()
     encoder_q = mp.Queue(maxsize=4 * args.batch_size)
-    ast_q = mp.Queue(maxsize=4 * args.batch_size)
+    ast_q = mp.Queue(maxsize=args.batch_size)
     write_q = mp.Queue()
     done = mp.Event()
 
