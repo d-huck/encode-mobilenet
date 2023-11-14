@@ -350,6 +350,7 @@ if __name__ == "__main__":
 
     if args.device == "cuda":
         torch.cuda.set_device(args.target_device)
+        args.device = f"cuda:{args.target_device}"
 
     torch.multiprocessing.set_start_method("spawn")
     torch.multiprocessing.set_sharing_strategy("file_system")
