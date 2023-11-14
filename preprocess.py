@@ -25,6 +25,7 @@ from copy import deepcopy
 import encodec
 from create_encoded_audioset import write_worker
 from data import get_files
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import json
@@ -209,13 +210,21 @@ def ast_worker(ast_q, write_q, done, args):
 
 
 def q_monitor(file_q, encode_q, ast_q, write_q, args, done):
-    while True:
-        if file_q.qsize() == 0 and encode_q.qsize() == 0 and write_q.qsize() == 0:
-            break
-        print(
-            f"File Queue: {file_q.qsize()} | Encode Queue: {encode_q.qsize():02d}/{args.batch_size} | AST Queue: {ast_q.qsize():02d}/{args.batch_size} | Write Queue: {write_q.qsize()}"
-        )
-        time.sleep(5)
+    size = file_q.qsize()
+    count = 0
+    with tqdm(total=size, smoothing=0.01) as pbar:
+        while True:
+            if file_q.qsize() == 0 and encode_q.qsize() == 0 and write_q.qsize() == 0:
+                break
+            old = size
+            size = file_q.qsize()
+            pbar.update(old - size)
+            if count % 10 == 0:
+                tqdm.write(
+                    f"File Queue: {file_q.qsize()} | Encode Queue: {encode_q.qsize():02d}/{args.batch_size} | AST Queue: {ast_q.qsize():02d}/{args.batch_size} | Write Queue: {write_q.qsize()}"
+                )
+            count += 1
+            time.sleep(1)
 
     done.wait()
 
