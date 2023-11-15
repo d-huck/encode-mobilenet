@@ -43,7 +43,11 @@ class AudioSetEpoch(Dataset):
         return len(self.files)
 
     def __getitem__(self, index):
-        data = torch.load(self.files[index])
+        try:
+            data = torch.load(self.files[index])
+        except:
+            print("BAD FILE: ", self.files[index])
+            return 0, 0  # cause an upstream error
         target = torch.tensor(data["labels"])
         target = torch.sum(
             F.one_hot(target, num_classes=527), dim=0, dtype=torch.float32
