@@ -49,7 +49,7 @@ class AudioSetEpoch(Dataset):
             F.one_hot(target, num_classes=527), dim=0, dtype=torch.float32
         )
 
-        audio = data["audio"].squeeze()
+        audio = data["audio_tokens"].squeeze()
         return audio, target
 
 

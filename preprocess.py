@@ -230,6 +230,9 @@ def q_monitor(file_q, encode_q, ast_q, write_q, args, done):
                 )
             count += 1
             time.sleep(1)
+        old = size
+        size = file_q.qsize()
+        pbar.update(old - size)   
 
     done.wait()
 
