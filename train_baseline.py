@@ -113,15 +113,16 @@ def train_one_epoch(
     tqdm.write(
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
     )
-    wandb.log(
-        {
-            "train_loss": t_loss,
-            "valid_loss": v_loss,
-            "train_map": train_map,
-            "valid_map": valid_map,
-            "lr": scheduler.get_last_lr()[0],
-        }
-    )
+    if args.wandb:
+        wandb.log(
+            {
+                "train_loss": t_loss,
+                "valid_loss": v_loss,
+                "train_map": train_map,
+                "valid_map": valid_map,
+                "lr": scheduler.get_last_lr()[0],
+            }
+        )
 
 
 def main(args):

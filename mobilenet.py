@@ -18,13 +18,11 @@ class MobileNetV3_Smol(nn.Module):
         self.quantizer.requires_grad = False
 
         # set up network
-        projection = nn.Sequential(
+        self.projection = nn.Sequential(
             nn.ConvTranspose2d(
-                1, 3, kernel_size=(2, 3), stride=(2, 1), padding=(16, 1), bias=False
+                1, 3, kernel_size=(2, 3), stride=(2, 1), padding=(16, 264), bias=False
             ),
             nn.BatchNorm2d(3),
-            act(inplace=True),
-            nn.Linear(750, 224),
             act(inplace=True),
         )
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1, bias=False)
@@ -111,8 +109,8 @@ class MobileNetDistilled(pl.LightningModule):
         self.projection = nn.Sequential(
             nn.Conv2d(
                 1,
-                3,
-                kernel_size=(1, 7),
+                int(16 * a),
+                kernel_size=(1, 3),
                 stride=(1, 2),
                 padding=(0, 0),
                 bias=False,
@@ -120,11 +118,11 @@ class MobileNetDistilled(pl.LightningModule):
             nn.BatchNorm2d(int(16 * a)),
             nn.ReLU(),
             nn.Conv2d(
-                3,
-                3,
-                kernel_size=(1, 3),
+                int(16 * a),
+                int(16 * a),
+                kernel_size=(1, 5),
                 stride=(1, 3),
-                padding=(0, 7),
+                padding=(0, 6),
                 bias=False,
             ),
             nn.BatchNorm2d(int(16 * a)),
@@ -132,7 +130,7 @@ class MobileNetDistilled(pl.LightningModule):
         )
 
         self.conv1 = nn.Conv2d(
-            3, int(16 * a), kernel_size=3, stride=1, padding=1, bias=False
+            int(16 * a), int(16 * a), kernel_size=21, stride=1, padding=2, bias=False
         )
 
         self.bn1 = nn.BatchNorm2d(int(16 * a))
@@ -274,43 +272,20 @@ class MobileNet(pl.LightningModule):
         self.projection = nn.Sequential(
             nn.Conv2d(
                 1,
-                3,
-                kernel_size=(1, 2),
-                stride=(1, 1),
-                padding=(0, 0),
-                bias=False,
-            ),
-            nn.BatchNorm2d(3),
-            nn.ReLU(),
-            nn.Conv2d(
-                3,
-                6,
+                4,
                 kernel_size=(1, 3),
                 stride=(1, 2),
                 padding=(0, 0),
-                dilation=(1, 3),
                 bias=False,
             ),
-            nn.BatchNorm2d(6),
+            nn.BatchNorm2d(4),
             nn.ReLU(),
             nn.Conv2d(
-                6,
-                12,
-                kernel_size=(1, 5),
-                stride=(1, 2),
-                padding=(0, 0),
-                dilation=(1, 5),
-                bias=False,
-            ),
-            nn.BatchNorm2d(12),
-            nn.ReLU(),
-            nn.Conv2d(
-                12,
+                4,
                 16,
-                kernel_size=(1, 9),
-                stride=(1, 1),
-                padding=(0, 4),
-                dilation=(1, 7),
+                kernel_size=(1, 5),
+                stride=(1, 3),
+                padding=(0, 6),
                 bias=False,
             ),
             nn.BatchNorm2d(16),
@@ -318,7 +293,7 @@ class MobileNet(pl.LightningModule):
         )
 
         self.conv1 = nn.Conv2d(
-            16, int(16 * a), kernel_size=21, stride=1, padding=2, bias=False
+            16, int(16 * a), kernel_size=3, stride=1, padding=2, bias=False
         )
 
         self.bn1 = nn.BatchNorm2d(int(16 * a))
