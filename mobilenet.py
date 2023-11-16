@@ -92,7 +92,7 @@ class MobileNetV3_Smol(nn.Module):
 
 
 class MobileNetDistilled(pl.LightningModule):
-    def __init__(self, encodec_bw=1.5, num_classes=10, a=1.0, act=nn.Hardswish):
+    def __init__(self, encodec_bw=1.5, num_classes=10, a=1.0, b=1.0, act=nn.Hardswish):
         super().__init__()
         encoder = EncodecModel.encodec_model_24khz()
         encoder.set_target_bandwidth(encodec_bw)

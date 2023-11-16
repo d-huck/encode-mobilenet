@@ -19,10 +19,13 @@ import torch.nn as nn
 import torchaudio
 import lightning as pl
 import wandb
+from mobilenet import MobileNetDistilled
 
 
-def main():
-    pass
+def main(args):
+    model = MobileNetDistilled(
+        encodec_bw=12.0, n_classes=args.n_classes, a=args.alpha, b=args.beta
+    )
 
 
 if __name__ == "__main__":

@@ -51,8 +51,10 @@ class AudioSetEpoch(Dataset):
             F.one_hot(target, num_classes=527), dim=0, dtype=torch.float32
         )
 
-        audio = data["audio"].squeeze()
-        return audio, target
+        audio = data["audio_tokens"].squeeze()
+        logits = data["ast_logits"]
+        ytid = data["ytid"]
+        return audio, target, logits, ytid
 
 
 class AudioSetDataModule(pl.LightningDataModule):
