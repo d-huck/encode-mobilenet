@@ -16,7 +16,13 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 import wandb
-from data import AudioSetDataset, AudioSetEpoch, GTZANDataset, get_files
+from data import (
+    AudioSetDataset,
+    AudioSetEpoch,
+    AudioSetValidate,
+    GTZANDataset,
+    get_files,
+)
 from encodec import EncodecModel
 from encodec.quantization import ResidualVectorQuantizer
 from encodec.utils import convert_audio
@@ -68,11 +74,11 @@ def train_one_epoch(
         train_loader, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
     ):
         optimizer.zero_grad()
-        x, y = x.to(args.device), y.to(args.device)
+        x, y, z = x.to(args.device), y.to(args.device), z.to(args.device)
         out = model(x)
-        
+
         class_loss = criterion(out, y)
-        
+
         out_soft = sigmoid(out / args.temperature)
         logits_soft = sigmoid(z / args.temperature)
         kd_loss = bce(out_soft, logits_soft)
@@ -102,10 +108,10 @@ def train_one_epoch(
             desc=f"Epoch: {epoch+1:03d} | Validation",
             position=0,
         ):
-            x, y = x.to(args.device), y.to(args.device)
+            x, y, z = x.to(args.device), y.to(args.device), z.to(args.device)
             out = model(x)
             class_loss = criterion(out, y)
-            
+
             out_soft = sigmoid(out / args.temperature)
             logits_soft = sigmoid(z / args.temperature)
             kd_loss = bce(out_soft, logits_soft)
@@ -175,10 +181,10 @@ def main(args):
 
     valid_files = [file for file in get_files(args.valid_path, ext=".pt")]
     print(len(valid_files))
-    valid_set = AudioSetEpoch(valid_files, device=args.device)
+    valid_set = AudioSetValidate(valid_files, device=args.device)
     valid_loader = DataLoader(
         valid_set,
-        shuffle=True,
+        shuffle=False,
         batch_size=args.batch_size,
         pin_memory=True,
     )
@@ -316,8 +322,18 @@ if __name__ == "__main__":
         default=1.0,
         help="Sets the width of the model. alpha == 1 produces MobileNetV3-Large, while any other value scales the width of the model.",
     )
-    parser.add_argument("--temperature", type=float, default=1.0, help="Temperature for knowledge distillation")
-    parser.add_argument("--kd_weight", type=float, default=1.0, help="Lambda for knowledge distillation. Higher values will increase weight of classication loss")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for knowledge distillation",
+    )
+    parser.add_argument(
+        "--kd_weight",
+        type=float,
+        default=1.0,
+        help="Lambda for knowledge distillation. Higher values will increase weight of classication loss",
+    )
     parser.add_argument(
         "--target_device", type=int, default=0, help="Sets the target device"
     )

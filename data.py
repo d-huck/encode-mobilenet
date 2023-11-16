@@ -1,3 +1,4 @@
+from cProfile import label
 import torch
 import os
 from torch.utils.data import Dataset, DataLoader
@@ -25,6 +26,35 @@ class AudioSetDataset(Dataset):
 
     def __getitem__(self, index):
         return self.files[index]
+
+
+class AudioSetValidate(Dataset):
+    def __init__(self, fp: list, device=None):
+        super().__init__()
+        self.data = []
+        for f in fp:
+            assert os.path.exists(f)
+            data = torch.load(f)
+            labels = torch.tensor(data["labels"])
+            data["labels"] = torch.sum(
+                F.one_hot(labels, num_classes=527), dim=0, dtype=torch.float32
+            )
+            self.data.append(data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        data = self.data[index]
+        return data["audio_tokens"].squeeze(), data["labels"], data["ast_logits"]
+        # labels = torch.tensor(data["labels"])
+        # labels = torch.sum(
+        #     F.one_hot(labels, num_classes=527), dim=0, dtype=torch.float32
+        # )
+
+        # audio = data["audio_tokens"].squeeze()
+        # logits = data["ast_logits"]
+        # return audio, labels, logits
 
 
 class AudioSetEpoch(Dataset):
