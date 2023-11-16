@@ -5,6 +5,8 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.nn.functional import sigmoid
+from torch.nn.functional import binary_cross_entropy as bce
 import torchaudio
 from sklearn.model_selection import train_test_split
 from torch.nn import init
@@ -62,14 +64,19 @@ def train_one_epoch(
     model.train()
     preds, targets = [], []
     t_loss, v_loss = 0, 0
-    for x, y in tqdm(
+    for x, y, z in tqdm(
         train_loader, leave=False, desc=f"Epoch: {epoch+1:03d} | Training  ", position=0
     ):
         optimizer.zero_grad()
         x, y = x.to(args.device), y.to(args.device)
         out = model(x)
-        loss = criterion(out, y)
-
+        
+        class_loss = criterion(out, y)
+        
+        out_soft = sigmoid(out / args.temperature)
+        logits_soft = sigmoid(z / args.temperature)
+        kd_loss = bce(out_soft, logits_soft)
+        loss = (class_loss * args.kd_weight) + (kd_loss * (1 - args.kd_weight))
         # collect some metrics
         t_loss += loss.item()
         preds.append(out.detach().to("cpu"))
@@ -89,7 +96,7 @@ def train_one_epoch(
     preds, targets = [], []
     model.eval()
     with torch.no_grad():
-        for x, y in tqdm(
+        for x, y, z in tqdm(
             valid_loader,
             leave=False,
             desc=f"Epoch: {epoch+1:03d} | Validation",
@@ -97,7 +104,12 @@ def train_one_epoch(
         ):
             x, y = x.to(args.device), y.to(args.device)
             out = model(x)
-            loss = criterion(out, y)
+            class_loss = criterion(out, y)
+            
+            out_soft = sigmoid(out / args.temperature)
+            logits_soft = sigmoid(z / args.temperature)
+            kd_loss = bce(out_soft, logits_soft)
+            loss = (class_loss * args.kd_weight) + (kd_loss * (1 - args.kd_weight))
 
             # collect some metrics
             v_loss += loss.item()
@@ -304,6 +316,8 @@ if __name__ == "__main__":
         default=1.0,
         help="Sets the width of the model. alpha == 1 produces MobileNetV3-Large, while any other value scales the width of the model.",
     )
+    parser.add_argument("--temperature", type=float, default=1.0, help="Temperature for knowledge distillation")
+    parser.add_argument("--kd_weight", type=float, default=1.0, help="Lambda for knowledge distillation. Higher values will increase weight of classication loss")
     parser.add_argument(
         "--target_device", type=int, default=0, help="Sets the target device"
     )
@@ -320,6 +334,5 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
-    # if args.num_workers > 0:
-    #     torch.multiprocessing.set_start_method("spawn")
+
     main(args)

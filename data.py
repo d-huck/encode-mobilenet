@@ -54,7 +54,8 @@ class AudioSetEpoch(Dataset):
         )
 
         audio = data["audio_tokens"].squeeze()
-        return audio, target
+        logits = data["ast_logits"]
+        return audio, target, logits
 
 
 class GTZANDataset(Dataset):
