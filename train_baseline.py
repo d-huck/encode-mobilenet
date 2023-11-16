@@ -187,7 +187,7 @@ def main(args):
         num_workers=0,
         shuffle=False,
         batch_size=args.batch_size,
-        pin_memory=True,
+        # pin_memory=True,
     )
 
     valid_iter_per_epoch = len(valid_loader)
