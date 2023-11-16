@@ -184,6 +184,7 @@ def main(args):
     valid_set = AudioSetValidate(valid_files, device=args.device)
     valid_loader = DataLoader(
         valid_set,
+        num_workers=0,
         shuffle=False,
         batch_size=args.batch_size,
         pin_memory=True,
