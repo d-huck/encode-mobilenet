@@ -113,15 +113,16 @@ def train_one_epoch(
     tqdm.write(
         f"Epoch: {epoch+1:03d} | TL: {t_loss:.6f} | VL: {v_loss:.6f} | TmAP: {train_map:.4f} | VmAP: {valid_map:.4f}  | LR: {scheduler.get_last_lr()[0]:.4E}"
     )
-    wandb.log(
-        {
-            "train_loss": t_loss,
-            "valid_loss": v_loss,
-            "train_map": train_map,
-            "valid_map": valid_map,
-            "lr": scheduler.get_last_lr()[0],
-        }
-    )
+    if args.wandb:
+        wandb.log(
+            {
+                "train_loss": t_loss,
+                "valid_loss": v_loss,
+                "train_map": train_map,
+                "valid_map": valid_map,
+                "lr": scheduler.get_last_lr()[0],
+            }
+        )
 
 
 def main(args):
@@ -303,12 +304,19 @@ if __name__ == "__main__":
         default=1.0,
         help="Sets the width of the model. alpha == 1 produces MobileNetV3-Large, while any other value scales the width of the model.",
     )
-
+    parser.add_argument(
+        "--target_device", type=int, default=0, help="Sets the target device"
+    )
     args = parser.parse_args()
 
     if args.wandb:
         wandb.init(project="encodec-mobilenet-as")
         wandb.config.update(args)
+
+    if args.device == "cuda":
+        torch.cuda.set_device(args.target_device)
+        args.device = f"cuda:{args.target_device}"
+
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)

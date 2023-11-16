@@ -261,7 +261,7 @@ class MobileNetDistilled(pl.LightningModule):
 
 
 # first layer of mobilenet
-class MobileNet(nn.Module):
+class MobileNet(pl.LightningModule):
     def __init__(self, encodec_bw=1.5, num_classes=10, a=1.0, act=nn.Hardswish):
         super(MobileNet, self).__init__()
         encoder = EncodecModel.encodec_model_24khz()
@@ -272,28 +272,28 @@ class MobileNet(nn.Module):
         self.projection = nn.Sequential(
             nn.Conv2d(
                 1,
-                int(16 * a),
+                4,
                 kernel_size=(1, 3),
                 stride=(1, 2),
                 padding=(0, 0),
                 bias=False,
             ),
-            nn.BatchNorm2d(int(16 * a)),
+            nn.BatchNorm2d(4),
             nn.ReLU(),
             nn.Conv2d(
-                int(16 * a),
-                int(16 * a),
+                4,
+                16,
                 kernel_size=(1, 5),
                 stride=(1, 3),
                 padding=(0, 6),
                 bias=False,
             ),
-            nn.BatchNorm2d(int(16 * a)),
+            nn.BatchNorm2d(16),
             nn.ReLU(),
         )
 
         self.conv1 = nn.Conv2d(
-            int(16 * a), int(16 * a), kernel_size=21, stride=1, padding=2, bias=False
+            16, int(16 * a), kernel_size=3, stride=1, padding=2, bias=False
         )
 
         self.bn1 = nn.BatchNorm2d(int(16 * a))
@@ -324,12 +324,12 @@ class MobileNet(nn.Module):
         self.hs2 = act(inplace=True)
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.linear3 = nn.Linear(int(960 * a), int(1280 * a), bias=False)
-        self.bn3 = nn.BatchNorm1d(int(1280 * a))
+        self.linear3 = nn.Linear(int(960 * a), 1280, bias=False)
+        self.bn3 = nn.BatchNorm1d(1280)
         self.hs3 = act(inplace=True)
         self.drop = nn.Dropout(0.2)
 
-        self.linear4 = nn.Linear(int(1280 * a), num_classes)
+        self.linear4 = nn.Linear(1280, num_classes)
         self.init_params()
 
     def init_params(self):
