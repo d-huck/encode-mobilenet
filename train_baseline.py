@@ -159,12 +159,15 @@ def main(args):
     criterion = nn.BCEWithLogitsLoss()
 
     sched_pct = args.warmup / args.epochs
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        epochs=args.epochs,
-        steps_per_epoch=train_iter_per_epoch,
-        pct_start=sched_pct,
-        max_lr=args.lr,
+
+    sched1 = torch.optim.lr_scheduler.LinearLR(optimizer, 0.3, total_iters=8)
+    sched2 = torch.optim.lr_scheduler.ConstantLR(optimizer, 1.0, total_iters=80)
+    sched3 = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=95, eta_min=8e-6
+    )
+    sched4 = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.01, total_iters=80)
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer, schedulers=[sched1, sched2, sched3, sched4], milestones=[8, 80, 175]
     )
 
     # load data
