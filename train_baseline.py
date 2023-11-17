@@ -91,7 +91,6 @@ def train_one_epoch(
         # do the thing
         loss.backward()
         optimizer.step()
-        scheduler.step()
         pbar.update(1)
 
     preds = torch.cat(preds).to(args.device)
@@ -126,6 +125,7 @@ def train_one_epoch(
     preds = torch.cat(preds).to(args.device)
     targets = torch.cat(targets).type(torch.int32).to(args.device)
     valid_map = metric(preds, targets).item()
+    scheduler.step()
     del preds, targets
 
     tqdm.write(
