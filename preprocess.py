@@ -58,7 +58,7 @@ def load_labels(fp: str) -> dict:
     return json.load(open(fp, "r"))["mid2int"]
 
 
-def encode_data(batch, encoder, args):
+def encode_data(batch, encoder, args, device="cuda"):
     """Encodes data to the target bandwidth using Encodec
 
     :param data: list of audio items
@@ -72,7 +72,7 @@ def encode_data(batch, encoder, args):
     :return: encoded data
     :rtype: _type_
     """
-    batch = batch.to(args.device)
+    batch = batch.to(device)
     with torch.no_grad():
         encoded_frames = encoder.encode(batch)
         codes = torch.cat([e[0] for e in encoded_frames], dim=-1)
