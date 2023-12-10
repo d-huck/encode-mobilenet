@@ -58,7 +58,7 @@ def load_labels(fp: str) -> dict:
     return json.load(open(fp, "r"))["mid2int"]
 
 
-def encode_data(batch, encoder, args, device="cuda"):
+def encode_data(batch, encoder, device="cuda"):
     """Encodes data to the target bandwidth using Encodec
 
     :param data: list of audio items
@@ -79,7 +79,7 @@ def encode_data(batch, encoder, args, device="cuda"):
         codes = codes.to("cpu").detach()
 
     encodings = [code.clone() for code in torch.split(codes, 1, dim=0)]
-    return encodings
+    return torch.stack(encodings)
 
 
 def prepare_audio(fp, resampler, feature_extractor):
