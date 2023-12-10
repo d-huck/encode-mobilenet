@@ -21,7 +21,7 @@ def get_scene_embeddings(audio, model):
     audio = audio.unsqueeze(1)
     audio = convert_audio(wav=audio.cpu(), sr=48000, target_sr=24000, target_channels=1)
 
-    codes = encode_data(audio, encoder.cuda(), "cuda:0")
+    codes = encode_data(audio, encoder.cuda(), "cuda")
 
     embeddings = model(codes.cuda())
     return embeddings

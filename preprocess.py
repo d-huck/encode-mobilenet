@@ -79,7 +79,7 @@ def encode_data(batch, encoder, device="cuda"):
         codes = codes.to("cpu").detach()
 
     encodings = [code.clone() for code in torch.split(codes, 1, dim=0)]
-    return torch.stack(encodings)
+    return torch.stack(encodings).squeeze()
 
 
 def prepare_audio(fp, resampler, feature_extractor):
