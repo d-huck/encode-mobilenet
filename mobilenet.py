@@ -349,20 +349,43 @@ class MobileNet(pl.LightningModule):
     def forward(self, x):
         # decode from the encodec representation
         x = x.transpose(0, 1)
+        # print("before quantizer", x.shape)
         x = self.quantizer.decode(x)
+        # print("after quantizer", x.shape)
 
         x = x.unsqueeze(1)  # add in a channel dimension
+        # print("before projection", x.shape)
         x = self.projection(x)
+        # print("after projection", x.shape)
 
         # run mobile net projection
         x = self.hs1(self.bn1(self.conv1(x)))
 
+        # print("after second projection", x.shape)
         # run the bnet
-        x = self.bneck(x)
+        # x = self.bneck(x)
+        all_features = torch.Tensor().cuda()
+        for i, bneck_block in enumerate(self.bneck):
+            block_num = i + 1
 
-        # classify
-        x = self.hs2(self.bn2(self.conv2(x)))
-        x = self.gap(x).flatten(1)
-        x = self.drop(self.hs3(self.bn3(self.linear3(x))))
+            x = bneck_block(x)
+            # print(f"after block {block_num}", x.shape)
 
-        return self.linear4(x)
+            if block_num in {5, 11, 13, 15}:
+                features = x.detach()
+                features = torch.mean(features, dim=3).view(features.shape[0], -1)
+                # features = torch.mean(features, dim=(0, 3)).view(1, -1)
+                all_features = torch.cat((all_features, features), dim=1)
+        
+        return all_features
+
+        # # classify
+        # x = self.hs2(self.bn2(self.conv2(x)))
+        # x = self.gap(x).flatten(1)
+        # x = self.drop(self.hs3(self.bn3(self.linear3(x))))
+
+        # return self.linear4(x)
+    
+    @property
+    def sample_rate(self):
+        return 48000
