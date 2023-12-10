@@ -23,7 +23,6 @@ import time
 from uu import encode
 from copy import deepcopy
 import encodec
-from create_encoded_audioset import write_worker
 from data import get_files
 from tqdm import tqdm
 import pandas as pd
